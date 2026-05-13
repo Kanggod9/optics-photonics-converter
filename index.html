@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Optics & Photonics Converter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="converter-panel" aria-labelledby="app-title">
+        <header class="app-header">
+          <p class="eyebrow">Optics and photonics</p>
+          <h1 id="app-title">Physical Properties Converter</h1>
+        </header>
+
+        <form id="converter-form" class="converter-grid">
+          <section class="input-block" aria-labelledby="from-title">
+            <h2 id="from-title">Source quantity</h2>
+            <label>
+              <span>Property</span>
+              <select id="from-property">
+                <option value="wavelength" selected>Wavelength (λ)</option>
+                <option value="frequency">Frequency (ν)</option>
+                <option value="angularFrequency">Angular frequency (ω)</option>
+                <option value="wavenumber">Wavenumber (ν̃)</option>
+                <option value="wavevector">Wavevector (k)</option>
+                <option value="energyJoule">Energy (joule)</option>
+                <option value="energyEv">Energy (electronvolt)</option>
+              </select>
+            </label>
+            <label>
+              <span>Value</span>
+              <input id="from-value" type="text" inputmode="decimal" value="1" autocomplete="off" />
+            </label>
+            <label>
+              <span>Unit</span>
+              <select id="from-unit">
+                <option value="1000000000000">Tm</option>
+                <option value="1000000000">Gm</option>
+                <option value="1000000">Mm</option>
+                <option value="1000" selected>km</option>
+                <option value="1">m</option>
+                <option value="0.01">cm</option>
+                <option value="0.001">mm</option>
+                <option value="0.000001">um</option>
+                <option value="0.000000001">nm</option>
+                <option value="0.000000000001">pm</option>
+                <option value="0.000000000000001">fm</option>
+                <option value="0.000000000000000001">am</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="input-block target-block" aria-labelledby="to-title">
+            <h2 id="to-title">Target quantity</h2>
+            <label>
+              <span>Property</span>
+              <select id="to-property">
+                <option value="wavelength">Wavelength (λ)</option>
+                <option value="frequency" selected>Frequency (ν)</option>
+                <option value="angularFrequency">Angular frequency (ω)</option>
+                <option value="wavenumber">Wavenumber (ν̃)</option>
+                <option value="wavevector">Wavevector (k)</option>
+                <option value="energyJoule">Energy (joule)</option>
+                <option value="energyEv">Energy (electronvolt)</option>
+              </select>
+            </label>
+            <label>
+              <span>Unit</span>
+              <select id="to-unit">
+                <option value="1000000000000" selected>THz</option>
+                <option value="1000000000">GHz</option>
+                <option value="1000000">MHz</option>
+                <option value="1000">kHz</option>
+                <option value="1">Hz</option>
+                <option value="0.001">mHz</option>
+                <option value="0.000001">uHz</option>
+                <option value="0.000000001">nHz</option>
+                <option value="0.000000000001">pHz</option>
+                <option value="0.000000000000001">fHz</option>
+                <option value="0.000000000000000001">aHz</option>
+              </select>
+            </label>
+          </section>
+
+          <section class="index-block" aria-labelledby="index-title">
+            <h2 id="index-title">Refractive index</h2>
+            <label>
+              <span>n</span>
+              <input id="refractive-index" type="number" min="0" step="any" value="1" />
+            </label>
+            <button id="calculate" type="submit">Calculate</button>
+          </section>
+
+          <section class="result-block" aria-labelledby="result-title">
+            <div class="result-heading">
+              <h2 id="result-title">Result</h2>
+              <button id="copy-result" class="secondary" type="button">Copy</button>
+            </div>
+            <output id="result-output" for="from-value refractive-index">
+              <span class="placeholder">Choose quantities, enter a value, then calculate.</span>
+            </output>
+          </section>
+        </form>
+      </section>
+    </main>
+
+    <script>
+      const CONSTANTS = Object.freeze({
+        c: 299792458,
+        h: 6.62607015e-34,
+        e: 1.602176634e-19,
+        twoPi: 2 * Math.PI,
+      });
+
+      const PREFIXES = Object.freeze([
+        ["T", 1e12],
+        ["G", 1e9],
+        ["M", 1e6],
+        ["k", 1e3],
+        ["", 1],
+        ["m", 1e-3],
+        ["u", 1e-6, "µ"],
+        ["n", 1e-9],
+        ["p", 1e-12],
+        ["f", 1e-15],
+        ["a", 1e-18],
+      ]);
+
+      const PROPERTIES = Object.freeze({
+        wavelength: { label: "Wavelength (λ)", unit: "m", symbol: "λ" },
+        frequency: { label: "Frequency (ν)", unit: "Hz", symbol: "ν" },
+        angularFrequency: { label: "Angular frequency (ω)", unit: "rad/s", symbol: "ω" },
+        wavenumber: { label: "Wavenumber (ν̃)", unit: "m^-1", symbol: "ν̃" },
+        wavevector: { label: "Wavevector (k)", unit: "rad/m", symbol: "k" },
+        energyJoule: { label: "Energy (joule)", unit: "J", symbol: "E" },
+        energyEv: { label: "Energy (electronvolt)", unit: "eV", symbol: "E" },
+      });
+
+      const form = document.querySelector("#converter-form");
+      const fromProperty = document.querySelector("#from-property");
+      const toProperty = document.querySelector("#to-property");
+      const fromValue = document.querySelector("#from-value");
+      const fromUnit = document.querySelector("#from-unit");
+      const toUnit = document.querySelector("#to-unit");
+      const refractiveIndex = document.querySelector("#refractive-index");
+      const resultOutput = document.querySelector("#result-output");
+      const copyButton = document.querySelector("#copy-result");
+      const calculateButton = document.querySelector("#calculate");
+      let latestResultText = "";
+
+      function prefixesFor(propertyKey) {
+        if (propertyKey !== "wavelength" && propertyKey !== "wavenumber") return PREFIXES;
+        return [
+          ["T", 1e12],
+          ["G", 1e9],
+          ["M", 1e6],
+          ["k", 1e3],
+          ["", 1],
+          ["c", 1e-2],
+          ["m", 1e-3],
+          ["u", 1e-6, "µ"],
+          ["n", 1e-9],
+          ["p", 1e-12],
+          ["f", 1e-15],
+          ["a", 1e-18],
+        ];
+      }
+
+      function prefixedUnits(propertyKey) {
+        if (propertyKey === "angularFrequency" || propertyKey === "wavevector") {
+          const unit = PROPERTIES[propertyKey].unit;
+          return [{ label: unit, value: unit, factor: 1 }];
+        }
+
+        if (propertyKey === "wavenumber") {
+          return prefixesFor(propertyKey).map(([prefix, factor, display]) => {
+            const unit = `${display ?? prefix}m^-1`;
+            return { label: unit, value: unit, factor: 1 / factor };
+          });
+        }
+
+        const baseUnit = PROPERTIES[propertyKey].unit;
+        return prefixesFor(propertyKey).map(([prefix, factor, display]) => {
+          const unit = `${display ?? prefix}${baseUnit}`;
+          return { label: unit, value: unit, factor };
+        });
+      }
+
+      function propertyChoices(excludedPropertyKey) {
+        return Object.entries(PROPERTIES)
+          .filter(([key]) => key !== excludedPropertyKey)
+          .map(([key, property]) => ({ key, label: property.label }));
+      }
+
+      function fillPropertySelect(select, excludedPropertyKey, preferredPropertyKey) {
+        const choices = propertyChoices(excludedPropertyKey);
+        select.replaceChildren();
+        for (const property of choices) {
+          const option = document.createElement("option");
+          option.value = property.key;
+          option.textContent = property.label;
+          select.append(option);
+        }
+        const allowed = choices.map((property) => property.key);
+        select.value = allowed.includes(preferredPropertyKey) ? preferredPropertyKey : allowed[0];
+      }
+
+      function fillUnitSelect(select, propertyKey, preferredUnitValue = null) {
+        const units = prefixedUnits(propertyKey);
+        select.replaceChildren();
+        for (const unit of units) {
+          const option = document.createElement("option");
+          option.value = unit.value;
+          option.dataset.factor = String(unit.factor);
+          option.textContent = unit.label;
+          select.append(option);
+        }
+        const allowed = units.map((unit) => unit.value);
+        select.value = allowed.includes(preferredUnitValue) ? preferredUnitValue : allowed[0];
+      }
+
+      function refreshControls(changedSelect = null) {
+        let nextFromProperty = fromProperty.value || "wavelength";
+        let nextToProperty = toProperty.value || "frequency";
+
+        if (nextFromProperty === nextToProperty) {
+          if (changedSelect === fromProperty) {
+            nextToProperty = propertyChoices(nextFromProperty)[0].key;
+          } else {
+            nextFromProperty = propertyChoices(nextToProperty)[0].key;
+          }
+        }
+
+        const nextFromUnit = fromUnit.value || "km";
+        const nextToUnit = toUnit.value || "THz";
+
+        fillPropertySelect(fromProperty, nextToProperty, nextFromProperty);
+        fillPropertySelect(toProperty, nextFromProperty, nextToProperty);
+        fillUnitSelect(fromUnit, fromProperty.value, nextFromUnit);
+        fillUnitSelect(toUnit, toProperty.value, nextToUnit);
+      }
+
+      function normalizeExpression(input) {
+        return input
+          .trim()
+          .replace(/×/g, "*")
+          .replace(/\s+/g, "")
+          .replace(/(\d|\))x10\^/gi, "$1*10^")
+          .replace(/\^([+-]?\d+(?:\.\d+)?)/g, "**($1)");
+      }
+
+      function parseValue(value, factor) {
+        const trimmed = String(value ?? "").trim();
+        if (!trimmed) throw new Error("Enter a value to convert.");
+        if (/[A-DF-Za-df-zµ/]/.test(trimmed)) {
+          throw new Error("Enter only the number in Value. Choose the unit from the Unit dropdown.");
+        }
+        const expression = normalizeExpression(trimmed);
+        if (!/^[0-9+\-*/().eE\s*]+$/.test(expression)) {
+          throw new Error("Enter a numeric value such as 1000, 1e3, or 1*10^-3.");
+        }
+        const number = Function(`"use strict"; return (${expression});`)();
+        if (!Number.isFinite(number) || number <= 0) {
+          throw new Error("Value must be a positive finite number.");
+        }
+        return number * factor;
+      }
+
+      function selectedUnit(select) {
+        const option = select.selectedOptions[0];
+        return {
+          label: option?.value ?? "",
+          factor: Number(option?.dataset.factor ?? 1),
+        };
+      }
+
+      function photonStateFromBase(propertyKey, baseValue, refractiveIndexValue) {
+        const n = Number(refractiveIndexValue);
+        if (!Number.isFinite(n) || n <= 0) {
+          throw new Error("Refractive index must be a positive number.");
+        }
+
+        let frequency;
+        if (propertyKey === "wavelength") frequency = CONSTANTS.c / (n * baseValue);
+        if (propertyKey === "frequency") frequency = baseValue;
+        if (propertyKey === "angularFrequency") frequency = baseValue / CONSTANTS.twoPi;
+        if (propertyKey === "wavenumber") frequency = (CONSTANTS.c * baseValue) / n;
+        if (propertyKey === "wavevector") frequency = (CONSTANTS.c * baseValue) / (n * CONSTANTS.twoPi);
+        if (propertyKey === "energyJoule") frequency = baseValue / CONSTANTS.h;
+        if (propertyKey === "energyEv") frequency = (baseValue * CONSTANTS.e) / CONSTANTS.h;
+
+        if (!Number.isFinite(frequency) || frequency <= 0) {
+          throw new Error("The converted frequency must be positive and finite.");
+        }
+
+        return {
+          frequency,
+          wavelength: CONSTANTS.c / (n * frequency),
+          angularFrequency: CONSTANTS.twoPi * frequency,
+          wavenumber: (n * frequency) / CONSTANTS.c,
+          wavevector: (CONSTANTS.twoPi * n * frequency) / CONSTANTS.c,
+          energyJoule: CONSTANTS.h * frequency,
+          energyEv: (CONSTANTS.h * frequency) / CONSTANTS.e,
+        };
+      }
+
+      function equationFor(fromKey, toKey) {
+        if (fromKey === toKey) return `${PROPERTIES[toKey].symbol} = ${PROPERTIES[fromKey].symbol}`;
+
+        const sourceToFrequency = {
+          wavelength: "ν = c / (nλ)",
+          frequency: "ν = ν",
+          angularFrequency: "ν = ω / 2π",
+          wavenumber: "ν = cν̃ / n",
+          wavevector: "ν = ck / (2πn)",
+          energyJoule: "ν = E / h",
+          energyEv: "ν = Ee / h",
+        };
+
+        const frequencyToTarget = {
+          wavelength: "λ = c / (nν)",
+          frequency: "ν = ν",
+          angularFrequency: "ω = 2πν",
+          wavenumber: "ν̃ = nν / c",
+          wavevector: "k = 2πnν / c",
+          energyJoule: "E = hν",
+          energyEv: "E = hν / e",
+        };
+
+        const equations = [];
+        if (fromKey !== "frequency") equations.push(sourceToFrequency[fromKey]);
+        if (toKey !== "frequency") equations.push(frequencyToTarget[toKey]);
+        return equations.join("; ");
+      }
+
+      function formatPlain(value) {
+        return new Intl.NumberFormat("en-US", {
+          maximumSignificantDigits: 15,
+          useGrouping: false,
+        }).format(value);
+      }
+
+      function formatScientific(value) {
+        const exponent = Math.floor(Math.log10(Math.abs(value)));
+        const coefficient = value / 10 ** exponent;
+        return `${formatPlain(coefficient)} × 10^${exponent}`;
+      }
+
+      function calculate() {
+        try {
+          const sourceUnit = selectedUnit(fromUnit);
+          const targetUnit = selectedUnit(toUnit);
+          const baseValue = parseValue(fromValue.value, sourceUnit.factor);
+          const state = photonStateFromBase(fromProperty.value, baseValue, refractiveIndex.value);
+          const value = state[toProperty.value] / targetUnit.factor;
+          const result = {
+            equation: equationFor(fromProperty.value, toProperty.value),
+            plain: formatPlain(value),
+            scientific: formatScientific(value),
+            programming: value.toExponential(12).replace("e+", "e"),
+          };
+
+          latestResultText = [
+            `Equation: ${result.equation}`,
+            `Plain: ${result.plain} ${targetUnit.label}`,
+            `Scientific: ${result.scientific} ${targetUnit.label}`,
+            `Programming: ${result.programming} ${targetUnit.label}`,
+          ].join("\n");
+
+          resultOutput.innerHTML = `
+            <div class="equation"></div>
+            <div class="result-line"><span>Plain number</span><code></code></div>
+            <div class="result-line"><span>Scientific</span><code></code></div>
+            <div class="result-line"><span>Programming</span><code></code></div>
+          `;
+          resultOutput.querySelector(".equation").textContent = result.equation;
+          const codes = resultOutput.querySelectorAll("code");
+          codes[0].textContent = `${result.plain} ${targetUnit.label}`;
+          codes[1].textContent = `${result.scientific} ${targetUnit.label}`;
+          codes[2].textContent = `${result.programming} ${targetUnit.label}`;
+        } catch (error) {
+          latestResultText = "";
+          resultOutput.innerHTML = "";
+          const message = document.createElement("span");
+          message.className = "error";
+          message.textContent = error.message;
+          resultOutput.append(message);
+        }
+      }
+
+      fromProperty.addEventListener("change", () => refreshControls(fromProperty));
+      toProperty.addEventListener("change", () => refreshControls(toProperty));
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        calculate();
+      });
+      calculateButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        calculate();
+      });
+      copyButton.addEventListener("click", async () => {
+        if (!latestResultText) return;
+        await navigator.clipboard.writeText(latestResultText);
+        copyButton.textContent = "Copied";
+        setTimeout(() => {
+          copyButton.textContent = "Copy";
+        }, 1100);
+      });
+
+      fromProperty.value = "wavelength";
+      toProperty.value = "frequency";
+      refreshControls();
+    </script>
+  </body>
+</html>
